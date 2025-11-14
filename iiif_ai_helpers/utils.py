@@ -25,8 +25,8 @@ def get_image_service(canvas):
 
 # Create an image URL, scaled to a size appropriate for the AI service used
 # Claude requests max of 1568x1568
-def get_image(image_service, size="!1568,1568"):
-    image_url = f"{image_service}/full/{size}/0/default.jpg"
+def get_image(image_service):
+    image_url = f"{image_service}/full/!1568,1568/0/default.jpg"
     media_type = "image/jpeg"
     # encode data
     image_data = base64.standard_b64encode(httpx.get(image_url).content).decode("utf-8")
@@ -37,11 +37,12 @@ def get_image(image_service, size="!1568,1568"):
     }
 
 # Call the Anthropic API
-def transcribe_image(image_data, media_type, key):
+def transcribe_image(image_data, media_type, prompt, system_prompt, key):
     client = anthropic.Anthropic(api_key=key)
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=4000,
+        system=system_prompt,
         messages=[
             {
                 "role": "user",
@@ -56,7 +57,7 @@ def transcribe_image(image_data, media_type, key):
                     },
                     {
                         "type": "text",
-                        "text": "Transcribe the text of the document in this image.  Do not describe the document or provide commentary, just the transcription."
+                        "text": prompt
                     }
                 ],
             }
@@ -64,18 +65,23 @@ def transcribe_image(image_data, media_type, key):
     )
     return message.content[0].text
 
+def create_html_annotation(canvas_id, text, language, motivation, text_granularity = None):
+    return create_annotation(canvas_id, text, language, "text/html",  motivation, text_granularity)annotation = {}
 
-def create_text_annotation(canvas_id, text, language, motiviation = 'commenting', text_granularity = None):
+def create_text_annotation(canvas_id, text, language, motivation, text_granularity = None):
+    return create_annotation(canvas_id, text, language, "text/plain", motivation, text_granularity)
+
+def create_annotation(canvas_id, text, language, text_format, motivation, text_granularity):
     id = f"https://example.org/anno/{uuid.uuid4()}"
     annotation = {
         'id': id,
         'type': 'Annotation',
-        'motivation': [motiviation],
+        'motivation': [motivation],
         'target': canvas_id,
         'body': {
             'id': f"{id}/body",
             'type': 'TextualBody',
-            'format': 'text/plain',
+            'format': text_format,
             'language': language,
             'value': text
         }
@@ -92,34 +98,5 @@ def create_annotation_page(annotations):
     }
 
 # Functions to store and update JSON using the free https://jsonblob.com service
-def create_json_location(url, data):
-    r = requests.post(
-        url,
-        data=json.dumps(data),
-        headers={'Content-Type': 'application/json'}
-    )
-    return r, r.headers.get('Location')
-
-def put_manifest_json(url, data):
-    """
-    Send a JSON payload to the given URL via HTTP PUT.
-
-    Args:
-        url (str): The target endpoint.
-        data (dict or str): The data to send. If a dict, it will be converted to JSON.
-
-    Returns:
-        requests.Response: The HTTP response object returned by the server.
-    """
-    # Ensure data is JSON string
-    if not isinstance(data, str):
-        json_data = json.dumps(data)
-    else:
-        json_data = data
-
-    headers = {"Content-Type": "application/json"}
-
-    # Perform the PUT request
-    response = requests.put(url, data=json_data, headers=headers)
-
-    return response
+create_json_location = lambda url, data: (lambda r: (r, r.headers.get('Location')))(requests.post(url, data=json.dumps(data), headers={'Content-Type': 'application/json'}))
+put_manifest_json = lambda url, data: requests.put(url, data=data, headers={'Content-Type': 'application/json'})
